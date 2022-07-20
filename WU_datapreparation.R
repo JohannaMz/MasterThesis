@@ -75,7 +75,7 @@ germany +
 #some outliers in RLP and NRW -> crop WU points to Hessen polygon
 hessen_sf <- filter(germany_sf, NAME_1 == "Hessen")
 hessen_sf$VARNAME_1 <- "HE"
-bawu_sf <- filter(germany_sf, NAME_1 == "Baden-W?rttemberg")
+bawu_sf <- filter(germany_sf, NAME_1 == "Baden-Württemberg")
 bawu_sf$VARNAME_1 <- "BW"
 
 rehe_WU_HE <- st_crop(rehe_WU_HE, hessen_sf)
@@ -84,28 +84,6 @@ rehe_WU_HE <- st_crop(rehe_WU_HE, hessen_sf)
 germany +
   tm_shape(rehe_WU_HE) +
   tm_symbols(size = 0.5)
-
-
-##using data from https://www.jagdverband.de/jagd-und-wildunfallstatistik to bring roe deer, red deer and fallow deer into relation: 
-#jagdjahr 14/15
-60/(14190+60+190) #damwild = 0.004
-190/(14190+60+190) #rotwidl = 0.01
-
-#15/16
-70/(15690+70+230) #damwild = 0.004
-230/(15690+70+230) #rotwild = 0.01
-
-#16/17
-40/(15480+40+250) #damwild = 0.003
-250/(15480+40+250) #rotwild = 0.02
-
-#17/18
-70/(14940+70+270) #damwild = 0.005
-270/(14940+70+270) #rotwild = 0.02
-
-#18/19
-60/(16150+60+280) #damwild = 0.004
-280/(16150+60+280) #rotwild = 0.02
 
 
 #### ATKIS Strassen layer (metadatentabelle: ATKIS_Objektartenkatalog_Basis_DLM_7.1) ####
@@ -124,8 +102,7 @@ roads_HE$wdm <- as.numeric(roads_HE$wdm)
 summary(as.factor(roads_HE$wdm))
 # 1301 1303 1305 1306 1307 9997 
 # 2068 4065 6173 3939 3784   51 
-# decided to keep highways in the model, because in Hessen there is accidents on all highways! 
-roads_HE <- filter(roads_HE, wdm != 9997) #take out the highways and unknwon roads:: wdm != 1301 &
+roads_HE <- filter(roads_HE, wdm != 9997) #take out the unknwon roads
 roads_HE$wdm_name <- NA
 roads_HE$wdm_name <- roads_HE$wdm
 roads_HE$wdm_name[roads_HE$wdm == 1301] <- "Highways"
@@ -187,8 +164,7 @@ st_write(rehe_WU_HE, "Layers/rehe_WU_HE.shp")
 
 #### rasterize street map into 50x50m grids: extract wdm and brf####
 
-#buffer in both directions quite a lot, because otherwiese rasterize missing many!
-# after 35, points are not included because they are outside the buffer, not because they are missed between pixels. 
+# after 35 m buffer: points are not included because they are outside the buffer, not because they are missed between pixels. 
 roads_HE_buffered <- st_buffer(roads_HE, dist = 35)
 #mean width decreases in size 
 roads_HE %>% 
@@ -218,7 +194,7 @@ gemeindestrassen_HE <- gemeindestrassen_HE %>%
          wdm_name = "Community roads")
 gemeindestrassen_HE <- st_transform(gemeindestrassen_HE, projection)
 
-#adding gemeindestra?en (mostly the small city roads!), as they are not included in the normal roads layer but be wuite important for the density calculation!
+#adding gemeindestraßen (mostly the small city roads!), as they are not included in the normal roads layer but be wuite important for the density calculation!
 #delete the gemeindestrassen in the road layer, so that those that are actually included are not doubled
 roads_density <- rbind(filter(roads_HE, wdm != 1307), gemeindestrassen_HE) 
 
@@ -252,7 +228,6 @@ roads_density_raster_focal_100m <- terra::focal(roads_density_raster, w=matrix(1
 
 
 #then mask on road network:
-#by the shifting it happends that now a pixel has a value of 0, because it takes the pixel next to the right one
 roads_density_masked <- mask(roads_density_raster_focal, roads_HE_raster_wdm)
 roads_density_masked_100m <- mask(roads_density_raster_focal_100m, roads_HE_raster_wdm)
 hist(roads_density_masked_100m)
@@ -600,7 +575,8 @@ ggsave("Figures/WU_per_hour.pdf")
 
 
 
-#time of day/month heatmap # seasons comparison plot
+#time of day/month heatmap 
+# seasons comparison plot
 rehe_WU_HE$season <- ifelse(rehe_WU_HE$monat >= 1 & rehe_WU_HE$monat <= 4, "Gestation", 
                             ifelse((rehe_WU_HE$monat == 5 | rehe_WU_HE$monat == 6)|
                                      (rehe_WU_HE$monat == 7 & rehe_WU_HE$tag <= 15) ,"Lactation", 
@@ -755,11 +731,11 @@ save.image(file='WU_datapreparation.RData')
 
 
 
-##### datapreparation for BaW� #####
+##### datapreparation for BaWü #####
 load("WU_prepration_BW.Rdata")
 
 
-#set up projection to be used thorughout the script!
+#set up projection to be used throughout the script!
 projection <- "+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs" #crs(rehe_WU)
 extent.bw <- extent(388200, 610200, 5261000, 5516000) #xmin, xmax, ymin, ymax -> extent of bawu and a bit outside
 resolution <- 50 #meter grids  
@@ -772,7 +748,6 @@ crs(r.raster_bw) <- projection
 
 
 #### ATKIS Strassen layer (metadatentabelle: ATKIS_Objektartenkatalog_Basis_DLM_7.1) ####
-#copy in WU_telemetry!!
 
 roads_BW <- read_sf("Layers/strassen_BW.shp")
 
@@ -827,63 +802,16 @@ gemeindestrassen_BW <- gemeindestrassen_BW %>%
          wdm_name = "Community roads")
 gemeindestrassen_BW <- st_transform(gemeindestrassen_BW, projection)
 
-#adding gemeindestra?en, as they are not included in the normal roads layer but be wuite important for the density calculation!
+#adding gemeindestraßen, as they are not included in the normal roads layer but be wuite important for the density calculation!
 #delete the gemeindestrassen in the road layer, so that those that are actually included are not doubled: some zeros now, because gemeindestrassen were deleted but not included in the new layer...
 roads_density_BW <- rbind(filter(roads_BW, wdm != 1307), gemeindestrassen_BW) 
 
 
-#split data into 5 pieces, because otherwise the code doenst run. 
-#part1
-roads_density_BW_1 <- st_crop(roads_density_BW, extent(388200, 610200-111000, 5261000, 5516000-127500))
-roads_density_BW_1_sp <- as(roads_density_BW_1, "Spatial")
-roads_density_BW_1_psp <- as.psp(roads_density_BW_1_sp)#takes long 2.5 stunden
-roads_density_BW_1_px <- pixellate(roads_density_BW_1_psp, eps = 50)  
-roads_density_BW_1_raster <- raster(roads_density_BW_1_px)
-crs(roads_density_BW_1_raster) <- projection
-
-#part2
-roads_density_BW_2 <- st_crop(roads_density_BW, extent(388200+111000, 610200, 5261000, 5516000-127500))
-roads_density_BW_2_sp <- as(roads_density_BW_2, "Spatial")
-Sys.time()
-roads_density_BW_2_psp <- as.psp(roads_density_BW_2_sp)#takes long 2 stunden
-Sys.time()
-roads_density_BW_2_px <- pixellate(roads_density_BW_2_psp, eps = 50)  
-roads_density_BW_2_raster <- raster(roads_density_BW_2_px)
-crs(roads_density_BW_2_raster) <- projection
-
-
-#part3.1
-roads_density_BW_3 <- st_crop(roads_density_BW, extent(388200+111000, 610200, 5261000+127500, 5516000-63750))
-roads_density_BW_3_sp <- as(roads_density_BW_3, "Spatial")
-Sys.time()
-roads_density_BW_3_psp <- as.psp(roads_density_BW_3_sp)#takes long  stunden
-Sys.time()
-roads_density_BW_3_px <- pixellate(roads_density_BW_3_psp, eps = 50)  
-roads_density_BW_3_raster <- raster(roads_density_BW_3_px)
-crs(roads_density_BW_3_raster) <- projection
-
-#part3.2
-roads_density_BW_3.2 <- st_crop(roads_density_BW, extent(388200+111000, 610200, 5261000+127500+63750, 5516000))
-roads_density_BW_3.2_sp <- as(roads_density_BW_3.2, "Spatial")
-Sys.time()
-roads_density_BW_3.2_psp <- as.psp(roads_density_BW_3.2_sp)#takes long  stunden
-Sys.time()
-roads_density_BW_3.2_px <- pixellate(roads_density_BW_3.2_psp, eps = 50)  
-roads_density_BW_3.2_raster <- raster(roads_density_BW_3.2_px)
-crs(roads_density_BW_3.2_raster) <- projection
-
-#part4
-roads_density_BW_4 <- st_crop(roads_density_BW, extent(388200+111000, 610200, 5261000+127500+63750, 5516000))
-roads_density_BW_4_sp <- as(roads_density_BW_4, "Spatial")
-Sys.time()
-roads_density_BW_4_psp <- as.psp(roads_density_BW_4_sp)#takes long  stunden
-Sys.time()
-roads_density_BW_4_px <- pixellate(roads_density_BW_4_psp, eps = 50)  
-roads_density_BW_4_raster <- raster(roads_density_BW_4_px)
-crs(roads_density_BW_4_raster) <- projection
-
-#exported and merged in ArcGIS using Mosaic to new raster
-roads_density_BW_raster <- raster("Layers/roads_density_BW_raster.tif")
+roads_density_BW_sp <- as(roads_density_BW, "Spatial")
+roads_density_BW_psp <- as.psp(roads_density_BW_sp)
+roads_density_BW_px <- pixellate(roads_density_BW_psp, eps = 50)  
+roads_density_BW_raster <- raster(roads_density_BW_px)
+crs(roads_density_BW_raster) <- projection
 
 
 #adjust to the right resolution, extent and projection!
@@ -906,7 +834,6 @@ roads_density_BW_raster_focal_100m <- terra::focal(roads_density_BW_raster, w=ma
 
 
 #then mask on road network:
-#by the shifting it happends that now a pixel has a value of 0, because it takes the pixel next to the right one
 roads_density_BW_masked <- mask(roads_density_BW_raster_focal, roads_BW_raster_wdm)
 roads_density_BW_masked_100m <- mask(roads_density_BW_raster_focal_100m, roads_BW_raster_wdm)
 hist(roads_density_BW_masked_100m)
@@ -1048,7 +975,6 @@ raster_BW_vector <- c(landcover_BW_1_masked, landcover_BW_2_masked, landcover_BW
                       landcover_BW_small_7_masked, landcover_BW_small_8_masked, landcover_BW_small_9_masked,
                       roads_BW_raster_brf, roads_density_BW_masked, roads_density_BW_masked_100m)
 
-#loop didng towkr. so all done extra. allocation error. so some of the scaled variables are not in the environment but saved in the folder
 
 #plus standardization of non-categorical covariates (chyn et al), all except for layer 22 road category
 #fastest version is looping rather than trying to scale the raster stack...
@@ -1098,7 +1024,7 @@ save.image(file = "WU_prepration_BW.Rdata")
 
 
 
-#compare hessen and baW� landcover
+#compare hessen and baWü landcover
 
 #possible extent with collared roe deer homerange polygons from WU_telemtry Script: roedeer_mcp_agg_sf
 compare_HR <- mask(landcover_BW_reclass, roedeer_mcp_agg_sf)
