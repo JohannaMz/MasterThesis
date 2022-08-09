@@ -25,14 +25,10 @@ library(MuMIn)
 
 setwd("W:/Masterarbeit Daten/Analyse")
 
-Sys.setenv(lang = "en_US") #change error messages to english
-
-
 
 #### SDM modelling prep ####
-
+# add raster layers if not in environment
 setwd("W:/Masterarbeit Daten/Analyse/Predictor Rasters/HE")
-#setwd("W:/Masterarbeit Daten/Analyse/Layers/unscaled predictors")
 
 raslist <- list.files(getwd(), pattern=".tiff$", full.names=FALSE)
 
@@ -43,7 +39,6 @@ for(r in raslist){
 
 
 setwd("W:/Masterarbeit Daten/Analyse")
-
 
 #make a raster stack: scaled variables! 
 raster_HE_stack_complete <- stack(landcover_HE_1_scaled, landcover_HE_2_scaled, landcover_HE_3_scaled, landcover_HE_4_scaled, 
@@ -60,9 +55,8 @@ names(raster_HE_stack_complete) <- c("Meadows1_200m", "Swamps2_200m", "Industry3
                                      "RoadDensity_200m", "RoadDensity_100m","RoadWidth","RoadCategory")
 
 
-
+# load unscaled layers
 setwd("W:/Masterarbeit Daten/Analyse/Layers/unscaled predictors/HE")
-
 raslist <- list.files(getwd(), pattern=".tiff$", full.names=FALSE)
 
 for(r in raslist){
@@ -89,11 +83,9 @@ names(raster_HE_stack_complete_unscaled) <- c("Meadows1_200m", "Swamps2_200m", "
 
 
 
-## prepare presence (WVC) and background locations ###
+### prepare presence (WVC) and background locations ###
 
 #select columns that contain the coordinnates of the locations
-#presence WU records
-
 projection <- "+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs"
 
 rehe_WU_HE <- st_read("Layers/rehe_WU_HE.shp")
@@ -105,7 +97,7 @@ rehe_WU_HE_occ <- rehe_WU_HE %>%
   as.data.frame()
 
 
-#construct background locations
+# construct background locations
 occur.ras <- rasterize(rehe_WU_HE_occ, raster_HE_stack_complete, 1) #fill cells with data with 1
 
 presences <- which(values(occur.ras) == 1)
@@ -116,7 +108,7 @@ rehe_WU_HE_dens_raster <- raster(rehe_WU_HE_dens)
 plot(rehe_WU_HE_dens_raster)
 
 
-#default raster to use for all hessen covariates
+# default raster to use for all hessen covariates
 r.raster <- raster()
 extent(r.raster) <- extent(412000, 587000, 5471000,  5723500) #xmin, xmax, ymin, ymax -> extent of Hessen and a bit outside
 res(r.raster) <- 50
@@ -128,7 +120,7 @@ bias_file <- projectRaster(rehe_WU_HE_dens_raster, r.raster)
 
 bias_file_masked <- mask(bias_file, raster_HE_stack_complete[[22]]) #mask the bias file with wdm raster as all others too
 
-
+# sample 10000 background points with prob = bias file
 bg_HE <- xyFromCell(bias_file_masked, sample(which(!is.na(values(bias_file_masked))), 10000, 
                                              prob=values(bias_file_masked)[!is.na(values(bias_file_masked))])) 
 
@@ -140,13 +132,11 @@ bg_HE_df <- bg_HE %>%
 
 
 
+#### SDMtune models ####
 
+# All seasons model
 
-##### SDMtune models #####
-
-## All seasons model
-
-# prepare an SWD object: Info: 14 presence locations are NA for some environmental variables, they are discarded! from density road layer
+# prepare an SWD object
 data_all <- prepareSWD(species = "WVC", p = rehe_WU_HE_occ, a = bg_HE_df, env = raster_HE_stack_complete, categorical = "RoadCategory")
 
 #explore SWD object and export (if necessary)
@@ -155,37 +145,20 @@ data_all@species #ect
 
 #train first model #
 
-# #one option: split into training and testing data 
-# datasets <- trainValTest(data_all, test = 0.2, only_presence = TRUE)
-# train <- datasets[[1]]
-# test <- datasets[[2]]
-# #all feature combinations possible, regularizazion multiplier equal to 1 and 500 algorithm iterations 
-# default_model <- train(method = "Maxent", data = train, fc = "l") 
-# default_model
-# #data: object with presence/background locations used to train the model, model: model configurations
-# slotNames(default_model) 
-
-
-#other option: using cross validation instead of training and testing datasets: generally better 
-#makes a SDMmodelCV object that hosts all the models trained during the cross validation
-#k = 5 seems agreeable as the dataset is very large. 
+# using cross validation instead of training and testing datasets: generally better 
+# makes a SDMmodelCV object that hosts all the models trained during the cross validation
+# k = 5 seems agreeable as the dataset is very large. 
 folds = randomFolds(data_all, k = 5, only_presence = TRUE)
 default_model_crossval <- train(method = "Maxent", data = data_all, fc = "l", folds = folds)
 
-
-# Compute variable importance: similar results for both methods. 
 #variable importance is base on the way how the variables are ordered, but permutation is updated between the models 
-vi <- varImp(default_model, permut = 5)
 vi_cross <- varImp(default_model_crossval, permut = 5)
 
 plotVarImp(vi_cross) #only permutation importance (actually the interesting one)
 
 
-#but from here on work with cross validated model: more robust modeling technique. 
 
-
-
-#variable selection#
+# variable selection
 # Prepare background locations to test autocorrelation
 bg_extra_coords <- dismo::randomPoints(raster_HE_stack_complete, 10000)
 bg_extra <- prepareSWD(species = "WVC", a = bg_extra_coords,
@@ -203,7 +176,7 @@ corVar(bg_extra, method = "spearman", cor_th = 0.7) #print pairs of correlated v
 # in the following example the variable importance is computed as permutation
 # importance
 
-#vs is the model after variableselection
+# vs is the model after variableselection
 model_crossval_vs <- varSel(default_model_crossval, metric = "auc", bg4cor = bg_extra, cor_th = 0.7,
                             permut = 10) #takes about 45 minutes (doesnt really change after 3 permutations. )
 
@@ -213,7 +186,7 @@ model_crossval_vs <- varSel(default_model_crossval, metric = "auc", bg4cor = bg_
 vi_cross_vs <- varImp(model_crossval_vs)
 
 
-#optimize hyperparameters#
+# optimize hyperparameters
 
 # Define the hyperparameters to test
 getTunableArgs(model_crossval_vs)
@@ -228,24 +201,24 @@ args <- list(reg = seq(0.2, 5, 0.2),
 crossval_vs_optimized <- optimizeModel(model_crossval_vs, hypers = args, metric = "auc", seed = 789) #takes 1:52 hours
 
 crossval_vs_optimized@results
-model_crossval_vs_optimized <- crossval_vs_optimized@models[[1]]#best model collection after optimizing process
+model_crossval_vs_optimized <- crossval_vs_optimized@models[[1]] #best model collection after optimizing process
 
 #with cross validation: 
 # fc: lqph
 # reg: 0.4
 # iter: 500
 
-plot(crossval_vs_optimized) #plot the optmization process, little info in the plot
+plot(crossval_vs_optimized) #plot the optmization process
 
 vs_optim <- varImp(model_crossval_vs_optimized) #the output is the average of the variable importance of each model trained during the cross validation
 plotVarImp(vs_optim)
 
 
-#reduce variation (optimize model parsimony) #
-#discards variables with low contribution
+# reduce variation (optimize model parsimony) 
+# discards variables with low contribution
 
-#reduce model, with permutation importance lower than 2% only of removing the variables 
-#the model performance does not decrease according to the AUC
+# reduce model, with permutation importance lower than 2% only of removing the variables 
+# the model performance does not decrease according to the AUC
 model_allSeasons_final <- reduceVar(model_crossval_vs_optimized, th = 2, 
                                     metric = "auc", permut = 10, use_jk = TRUE)
 #Removed variables: Swamps2_200m, Swamps2_100m
@@ -276,12 +249,10 @@ ggsave("Figures/VarImp_varImp_allSeasons_final.pdf")
 
 
 ### evaluation statistics ###
+auc(model_allSeasons_final@models[[1]]) #the cv data, that makes an average AUC out of the 5 models
 
-
-auc(model_allSeasons_final@models[[1]]) #the cv data, that makes an avera AUC out of the 5 models
-#calculate mean and sd for all models 
-
-#make tabe to fill with all seasons
+# calculate mean and sd for all models 
+# make tabe to fill with all seasons
 model_performance <- data.frame(matrix(NA, nrow = 5, ncol = 6))
 colnames(model_performance) <- c("AUC_mean", "AUC_sd", "TSS_mean", "TSS_sd", "COR_mean", "COR_sd")
 rownames(model_performance) <- c("All","Gestation", "Lactation", "Rut", "Diapause")
@@ -305,7 +276,7 @@ model_performance[1,3] <- mean(tss_list) #0.3689115
 model_performance[1,4] <- sd(tss_list) #0.001044798
 
 
-
+# plot ROC curve
 library(plotROC)
 plotROC_JM <- function(model, test = NULL, text = 25, legend = TRUE) {
   
@@ -367,17 +338,14 @@ pdf(file="Figures/ROC_varImp_allSeasons_final.pdf")
 plotROC_JM(model_allSeasons_final@models[[1]]) 
 dev.off()
 
-#plotROC_JM(model_final, test = test_optim) 
-#plots also the testing AUC, training is usually higher than testing line
 #training line shows the fit of the model data, 
 #testing indicates the fit of the model to the testing data: real test of the models predictive power
 
 
 
-### response curves ###
+### response curves for all-seasons model ###
 
 ##raster layers need to be loaded for this.
-
 #open source code: https://rdrr.io/cran/SDMtune/src/R/utils.R to be able to change the code
 .get_train_args <- function(model) {
   
@@ -431,7 +399,7 @@ dev.off()
 
 #changed the functions get_plot_data and plotResponse, so that x axis is backtransformed. 
 
-#Needs now furthermore: 
+# Needs now furthermore: 
 #- backtransformRaster: the raster layer with the unscaled variables
 #- a SWDdata with the set of unscaled predictors that were in the final model 
 
@@ -663,10 +631,9 @@ dev.off()
 
 
 
-### Model predictions ###
+### Model predictions with all-seasons model ###
 
 #predict: output is a vecotr containing all the predicted values for the training locations
-
 predict_all <- predict(model_allSeasons_final, data = data_all, type = "cloglog")
 
 #cor statistic
@@ -681,9 +648,7 @@ model_performance[1,6] <- sd(cor_list) #0.001044798
 
 #pocplot(predict_all[data_all@pa == 1], predict_all[data_all@pa == 0], linearize = TRUE)
 
-
-
-#predictionts only for the presence locations
+# predictionts only for the presence locations
 p <- data_all@data[data_all@pa == 1, ]
 hist(predict(model_allSeasons_final, data = p, type = "cloglog")) #prediction for all presence records i.e. something like residual analysis 
 
@@ -703,7 +668,7 @@ plotPred(map_large, lt = "Probability of \nDVC occurrence",colorramp = c("#2c7bb
 
 
 
-## Season models ####
+#### Season models ####
 
 rehe_WU_HE$season <- ifelse(rehe_WU_HE$monat >= 1 & rehe_WU_HE$monat <= 4, "Gestation", 
                             ifelse((rehe_WU_HE$monat == 5 | rehe_WU_HE$monat == 6)|
@@ -995,7 +960,7 @@ model_performance[5,6] <- sd(cor_list) #0.0006027654
 
 
 
-### Combined response curves for season models 
+### Combined response curves for season models ###
 
 #function to extract the data to be plotted
 plotResponseData_JM <- function(model, var, type = NULL, only_presence = FALSE,
@@ -1070,7 +1035,7 @@ plotResponseData_JM <- function(model, var, type = NULL, only_presence = FALSE,
   return(plot_data)
 }
 
-#function to bind all response datasets together to be able to plot them in one graph
+# function to bind all response datasets together to be able to plot them in one graph
 BindResponseData <- function(var, backtransformRaster = NULL){
   
   ResponseRut <- plotResponseData_JM(model = model_rut_final, 
@@ -1125,8 +1090,7 @@ ggplot(Response_broadleafed,
 
 dev.off()
 
-#Road denisty
-
+#Road density
 Response_RoadDensity <- BindResponseData(var = "RoadDensity_200m", 
                                          backtransformRaster = roads_density_masked) 
 
@@ -1309,7 +1273,7 @@ dev.off()
 
 
 
-
+# combined Variable Importance Plot
 VarImp_allSeasons_final$Season <- "All"
 VarImp_lact_final$Season <- "Lactation"
 VarImp_rut_final$Season <- "Rut"
@@ -1354,6 +1318,7 @@ ggplot(vi_combined, aes(x = reorder(Variable, Permutation_importance), y = Permu
 ggsave("Figures/VarImp_combined.pdf")
 
 
+#export model performance table for latex format
 library(xtable)
 model_performance
 model_performance_ltx <- xtable(model_performance, caption = "Model performance")
@@ -1364,7 +1329,7 @@ print(model_performance_ltx,file="Figures/model_performance_ltx.tex",table.place
 
 
 
-#### Baden-Württemberg Data Preparation ####
+#### Baden-Württemberg Data Preparation for validation ####
 
 
 ## read in environmental variables for BW#
@@ -1427,7 +1392,6 @@ roads_BW <- st_transform(roads_BW, projection)
 
 
 ## set up libraries and rdata
-
 library(sf)
 library(dplyr)
 library(tmap)
@@ -1439,25 +1403,17 @@ library(lubridate)
 library(adehabitatHR)
 
 setwd("W:/Masterarbeit Daten/Analyse")
-#load("WU_telemetry.RData")
-Sys.setenv(lang = "en_US") #change error messages to english
 
 
-# WVC validation with WU_BW
-
-
+# WVC validation with WU_BW data 
 WU_BW <- read.csv2("W:/Masterarbeit Daten/Analyse/SDM/BW_Wildunfall_1.5.21-30.4.22.csv")
 #summary(WU_BW)
 
 WU_BW <- filter(WU_BW, !is.na(US_GEO_X) & !is.na(US_GEO_Y))
 WU_BW <- dplyr::select(WU_BW, UN_KEY, KO_UDATUM, KO_UMONAT, KO_UZEIT, KO_USTDE, KO_WOTAG, US_GDE, US_STRA1, SS_EDATUM, SS_EZEIT, US_GEO_X, US_GEO_Y, UN_KAT, Hergangstext) #unterschied zwischen KO_UDATM und SS_EDATUM verstehen -> mathias jost
 
-#View(WU_BW[(grep("Hirsch", WU_BW[,14])), ]) #nothing more included. a lot of names with hirsch. 
-
-
 # extract rows that have Reh in the "Hergansgtext"
 rehe_WU_BW <- WU_BW[(grep("Reh", WU_BW[,14])), ] #12907 rows. 
-rm(WU_BW)
 
 rehe_WU_BW <- st_as_sf(rehe_WU_BW, coords = c("US_GEO_X", "US_GEO_Y"), crs = "EPSG:4326")
 rehe_WU_BW <- st_transform(rehe_WU_BW, projection)
@@ -1471,24 +1427,6 @@ rehe_WU_BW <- st_crop(rehe_WU_BW, bawu_sf) #all points within BW.
 
 #### snap coordinates #### same as in WU_datapreparation for the WU in hessen
 #change coordinates of the points that are just next to the road lines: snap 
-
-st_snap_points = function(x, y, max_dist = 200) {
-  
-  if (inherits(x, "sf")) n = nrow(x)
-  if (inherits(x, "sfc")) n = length(x)
-  
-  out = do.call(c,
-                lapply(seq(n), function(i) {
-                  nrst = st_nearest_points(st_geometry(x)[i], y)
-                  nrst_len = st_length(nrst)
-                  nrst_mn = which.min(nrst_len)
-                  if (as.vector(nrst_len[nrst_mn]) > max_dist) return(st_geometry(x)[i])
-                  return(st_cast(nrst[nrst_mn], "POINT")[2])
-                })
-  )
-  return(out)
-}
-
 tst <- st_snap_points(rehe_WU_BW, roads_BW, max_dist = 150) #takes about 3.5 hours
 rehe_WU_BW$geometry <- tst
 
@@ -1499,10 +1437,6 @@ outside <- sapply(st_intersects(rehe_WU_BW, roads_BW_buffered150),function(x){le
 
 rehe_WU_BW_outside <- rehe_WU_BW[outside, ] #272 points
 rehe_WU_BW <- rehe_WU_BW[!outside, ]
-
-rm(roads_BW_buffered150, outside, rehe_WU_BW_outside)
-
-st_write(rehe_WU_BW, "Layers/rehe_WU_BW.shp", append = FALSE)
 
 
 #split the points per season
@@ -1526,7 +1460,7 @@ rehe_WU_BW_occ <- rehe_WU_BW %>%
   as.data.frame()
 
 
-#construct background locations just s it was done for the WU in hessen, because most points are again from accidant category 5!
+#construct background locations just a it was done for the WU in hessen, because most points are again from accidant category 5!
 occur.ras <- rasterize(rehe_WU_BW_occ, raster_BW_stack_complete, 1) #fill cells with data with 1
 
 presences <- which(values(occur.ras) == 1)
@@ -1565,7 +1499,6 @@ bg_BW_df <- bg_BW %>%
 ### SDM validation with BW ####
 
 # make SWD dataframe
-
 # check which points do not have predicotr information: they are spread randomly (lie just between two points), so okay to delete them
 extract <- as.data.frame(raster::extract(raster_BW_stack_complete, rehe_WU_BW_occ))
 index <- stats::complete.cases(extract)
@@ -1595,7 +1528,6 @@ dev.off()
 
 #predict risk with best all seasons model: split pa == 0 und pa == 1
 # rehe_WU_BW$risk_allSeasons <- predict(model_allSeasons_final, data = rehe_WU_BW_SWD@data[rehe_WU_BW_SWD@pa == 1, ], type = "cloglog") #predict for all true presence points
-
 pred_all_df <- data.frame(ID = seq(1:length(rehe_WU_BW_SWD@pa)),
                           p_num = rehe_WU_BW_SWD@pa,
                           p = as.factor(ifelse(rehe_WU_BW_SWD@pa == 1, "DVC Presence", "Background")), 
