@@ -27,7 +27,6 @@ library(MuMIn)
 projection <- "+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs"
 
 roedeer_telem <- read.csv2("Roe Deer Telemetry Data/roedeer_telem.csv")
-head(roedeer_telem)
 
 roedeer_telem$ts <- as.POSIXct(roedeer_telem$ts, format = "%Y-%m-%d %H:%M:%S")
 summary(roedeer_telem$ts) #some have no timestamps. delete:
@@ -44,22 +43,6 @@ roedeer_telem_sf <- st_transform(roedeer_telem_sf, projection) #change to right 
 
 #### find road crossing locations ####
 
-
-# #example for one id
-# id_22 <- filter(roedeer_telem_sf, (animal_id == 22| animal_id == 19) & month(ts) == 2 & year(ts) == 2012)
-# id_22_traj <- as_sftraj(id_22, group = c(id = "animal_id"), time = "ts")
-# id_22_sf <- sf::st_as_sf(id_22_traj[, c(1:25, 27), drop = TRUE])
-# 
-# roads_crop <- st_crop(roads_BW, extent(418200, 420000, 5382000, 5390000))
-# intersections22 <- st_intersection(id_22_sf, roads_crop)
-# 
-# plot(st_geometry(id_22_sf))
-# plot(roads_crop, add = TRUE)
-# plot(intersections22, add = TRUE, col = "red")
-# rm(id_22, id_22_df, id_22_sf, id_22_traj)
-
-
-#for entire dataset
 duplicates <- duplicated(roedeer_telem[,c(3,12)]) #check that there are no duplicates in the coluns animal id and ts
 roedeer_telem_traj <- as_sftraj(roedeer_telem_sf, group = c(id = "animal_id"), time = "ts") #5 minuten
 summary(roedeer_telem_traj)
@@ -117,8 +100,6 @@ road_intersect_final$season <- ifelse(road_intersect_final$monat >= 1 & road_int
 
 
 ## define home ranges of roe deer with all telem datapoints
-
-
 roedeer_telem_all <- read.csv2("Roe Deer Telemetry Data/roedeer_telem_all.csv")
 head(roedeer_telem_all)
 
@@ -150,9 +131,8 @@ road_intersect_final <- st_intersection(road_intersect_final, roedeer_mcp_agg_sf
 roads_BW_HR <- st_intersection(roads_BW, roedeer_mcp_agg_sf)
 
 
-## WVC as crossings ####
-
-
+## identify WVC as crossings ####
+                                                                  
 ######could there be the WVC as a crossing? -> non successful crossing!#
 #ID1 death 25.22.2013 -> last collar date in 2011, so no. 
 #summary(filter(roedeer_telem_all_sf, animal_id == 1)$ts)
@@ -296,7 +276,7 @@ road_intersect_final$case[road_intersect_final$animal_id == 54 &
 
 
 
-## roe deer ID table and summaries ####
+#### roe deer ID table and summaries ####
 #understand roe deer ids and prepare table
 roedeer_ids <- read.csv("Roe Deer Telemetry Data/animal_id_roe deer.csv", sep=";", na.strings = "")
 roedeer_ids$area <- as.factor(roedeer_ids$area)
@@ -399,7 +379,6 @@ count(roedeer_ids, status)
 roedeer_ids$cause_of_death[roedeer_ids$cause_of_death == "vehicle_collision"] <- "vehicle collision"
 count(roedeer_ids, cause_of_death)
 
-rm(telem_min_date, telem_max_date)
 
 road_intersect_final <- roedeer_ids %>% 
   dplyr::select(area, animal_id) %>% 
@@ -418,11 +397,9 @@ summary(roedeer_ids$no_crossings) #471.4
 sd(roedeer_ids$no_crossings, na.rm= TRUE)
 
 
-#summary crossings over roads
+#summary crossings over roads in relation to roads in home ranges 
 summary(road_intersect_final$wdm_name)
-#in relation to roads in home ranges 
-
-
+                                                                  
 #in relatino to length of road categories in home ranges
 roads_BW_HR$length <- as.numeric(st_length(roads_BW_HR)) #in meters
 
@@ -439,20 +416,10 @@ roads_BW_HR %>%
 
 
 #prepare table for latex
-# roedeer_ids <- dplyr::select(roedeer_ids, area, animal_id, name, sex, 
-#                              telem_min_date, telem_max_date, diff_days, no_crossings, 
-#                              date_of_death, cause_of_death)
-# write.csv(roedeer_ids, "roedeer_ids_latex.csv")
-
-
-## save new layers and Rdata
-
-#save layers: some warnings that however do not influence the shapefile
-#st_write(road_intersect_final, "Roe Deer Telemetry Data/road_intersections_final.shp")
-st_write(roads_BW_HR, "Roe Deer Telemetry Data/roads_BW_HR.shp")
-
-save.image(file='WU_telemetry.RData')
-
+roedeer_ids <- dplyr::select(roedeer_ids, area, animal_id, name, sex, 
+                              telem_min_date, telem_max_date, diff_days, no_crossings, 
+                              date_of_death, cause_of_death)
+write.csv(roedeer_ids, "roedeer_ids_latex.csv")
 
 
 #### decriptive figures ####
@@ -649,7 +616,7 @@ road_intersect_occ <- road_intersect_final %>%
   st_coordinates() %>% 
   as.data.frame()
 
-#two points fall within now raster:check which ones
+#two points fall within now raster: check which ones
 extract <- as.data.frame(raster::extract(raster_BW_stack_complete, road_intersect_occ))
 index <- stats::complete.cases(extract)
 summary(index)
@@ -665,8 +632,6 @@ road_intersect_occ <- road_intersect_final %>%
 
 
 # prepare an SWD object for BW with only presence locations. 
-
-
 crossings_SWD <- prepareSWD(species = "WVC", p = road_intersect_occ, env = raster_BW_stack_complete, categorical = "RoadCategory")
 
 #predict risk with best all seasons model
@@ -686,7 +651,6 @@ summary(filter(road_intersect_final, case == "crossing")$risk)
 
 
 ## distribution map with risk prob
-
 
 #creating a distribution map for HR of roe deer
 predict_allSeasons <- predict(model_allSeasons_final, data = raster_BW_stack_complete,
@@ -719,7 +683,7 @@ map_allSeasons +
 dev.off()
 
 
-#only for those that actually have crossed roads
+#plot for each individual the road crossing behaviour: only for those that actually have crossed roads
 roedeer_ids_vector <- roedeer_ids %>% 
   filter(no_crossings > 5)
 
@@ -786,7 +750,6 @@ for (i in roedeer_ids_vector) {
 ## Analysis of risk####
 
 ## data preparation samplepoints_sf_ids
-
 
 #inforation for rut 
 samplepoints_sf_rut_list <- list()
@@ -915,7 +878,7 @@ View(WVC_crossings_sf)
 
 
 WVC_crossings_summary <- data.frame(matrix(data = NA, nrow = nrow(WVC_crossings), ncol = 12))
-colnames(WVC_crossings_summary) <- c("animal_id", "area", "wdm_name", "risk", "Season","sex", "days", "no_crossings",           "min_allCrossings", "max_allCrossings",  "mean_allCrossings", "no_samplingbuffers")
+colnames(WVC_crossings_summary) <- c("animal_id", "area", "wdm_name", "risk", "Season","sex", "days", "no_crossings",  "min_allCrossings", "max_allCrossings",  "mean_allCrossings", "no_samplingbuffers")
 
 for (i in 1:nrow(WVC_crossings)) {
   y <- unique(WVC_crossings$animal_id)[i]
@@ -951,11 +914,7 @@ sd(WVC_crossings$risk)
 
 
 ## analysis
-
-
-
 #individuals that were only measured for less than 7 days during a prediod should be deleted for analysis -> bias by eg ID 29 during rut
-#save old data just t be sure 
 samplepoints_sf_ids_analysis <- filter(samplepoints_sf_ids, days > 7)
 
 #sex could influence more risky behaviour when crossing = interaction
@@ -989,7 +948,7 @@ samplepoints_sf_ids_analysis  %>%
 ggsave("Figures/crossings_descriptives_figure.pdf", width = 25, height = 15, units = "cm")
 
 
-#these are the two extremly high crossings. two males that 
+#these are the two extremly high crossings.
 #View(filter(samplepoints_sf_ids_analysis , sex == "m" & round(risk, 1) == 0.3 & Season == "Rut")) #males 22, 29, 47, mostly 29 resp
 #View(filter(samplepoints_sf_ids_analysis , sex == "m" & round(risk, 1) == 0.4 & Season == "Rut")) #males 22, 29, 47, mostly 29 & 47
 
@@ -1016,7 +975,7 @@ samplepoints_sf_ids_analysis  %>%
   labs(x = "Sex", y = "Modelled DVC risk")
 ggsave("Figures/crossings_descriptives_sex.pdf", width = 15, height = 15, units = "cm")
 
-#enough poits per sex and season
+#enough points per sex and season
 samplepoints_sf_ids_analysis  %>% 
   st_drop_geometry() %>% 
   count(sex, Season)
@@ -1040,7 +999,7 @@ samplepoints_sf_ids_analysis  %>%
 
 #analysis with both sexes, but then ID has to be taken out as random effect. do own anova with only ID to show the differences between individuals? change to all seasons, offset per day
 
-#who is the outlier? just a female with the ppoint in the middle of her home range... 
+#who is the outlier? just a female with the point in the middle of her home range... 
 #samplepoints_sf_ids_analysis[2041,]
 #road_intersect_ID40 <- filter(road_intersect_final, animal_id == 40 & season == "Gestation")
 # intersect <- st_intersects(samplepoints_sf[which(samplepoints_sf$pointID == 109), ], 
@@ -1270,114 +1229,3 @@ exp(-0.5953) # + 0.5513971 for males (sig) ??? less zeros in males than in femal
 #         custom.names = c(),  #customize variable names
 #        custom.model.names = c(""), include.aic = TRUE, include.bic = FALSE,include.aicc = FALSE, return.string = TRUE)
 # print(analysis.ids.glmm.final_ltx, file="figures/analysis.ids.glmm.final_ltx.tex")
-
-
-### Try out an SDM for crossings ####
-
-#rasterize mcp polygons. count if multiple are on top of each other as bias file
-mcp.raster <- rasterize(roedeer_mcp, r.raster_bw, 1, fun = "count")
-
-raster_HR_wdm <- mask(raster_BW_stack_complete[[22]], roedeer_mcp_agg)
-mcp.raster_masked <- mask(mcp.raster, raster_HR_wdm) #mask the bias file with wdm raster for only home range roads
-
-#extract 10000 background points with probability of being sampled based on the bias raster 
-bg.HR <- xyFromCell(mcp.raster_masked, sample(which(!is.na(values(mcp.raster_masked))), 900, 
-                                              prob=values(mcp.raster_masked)[!is.na(values(mcp.raster_masked))])) 
-
-
-bg.HR_df <- bg.HR %>% 
-  as.data.frame() %>% 
-  rename(X = x, 
-         Y = y)
-#bg_sf <- st_as_sf(bg_df, coords = c("x", "y"), crs = projection)
-
-
-
-crossings_SWD_withbg <- prepareSWD(species = "WVC", p = road_intersect_occ, a = bg.HR_df, env = raster_BW_stack_complete, categorical = "RoadCategory")
-
-folds = randomFolds(crossings_SWD_withbg, k = 5, only_presence = TRUE)
-crossings_model_crossval <- train(method = "Maxent", data = crossings_SWD_withbg, fc = "l", folds = folds)
-
-
-# Prepare background locations to test autocorrelation
-bg_extra_HR_coords <- dismo::randomPoints(raster_BW_stack_complete, 900)
-bg_extra_HR <- prepareSWD(species = "WVC", a = bg_extra_HR_coords,
-                          env = raster_BW_stack_complete, categorical = "RoadCategory")
-
-model_crossings_crossval_vs <- varSel(crossings_model_crossval, metric = "auc",
-                                      bg4cor = bg_extra_HR, cor_th = 0.7, permut = 10) #7 minutes for 3 permut
-# Removed variables: Swamps2_200m, Urbanareas4_200m, Complex.habitats5_200m, MixedForests7_200m, Meadows1_100m, Industry3_100m, ConiferForests6_100m, BroadleafedForests8_100m, ArableAreas9_100m, RoadDensity_200m
-
-
-vi_crossings_cross_vs <- varImp(model_crossings_crossval_vs)
-
-crossings_crossval_vs_optimized <- optimizeModel(model_crossings_crossval_vs, hypers = args, 
-                                                 metric = "auc", seed = 789) #22 min
-
-crossings_crossval_vs_optimized@results
-model_crossings_crossval_vs_optimized <- crossings_crossval_vs_optimized@models[[1]]#best model collection after optimizing process
-# fc: lqph
-# reg: 0.6
-# iter: 500
-model_crossings_final <- reduceVar(model_crossings_crossval_vs_optimized, th = 2, 
-                                   metric = "auc", permut = 10, use_jk = TRUE)
-#Removed variables: none. 
-
-VarImp_crossings_final <- varImp(model_crossings_final)
-plotVarImp(VarImp_crossings_final)
-
-
-auc_list <- c()
-for(i in 1:5){
-  auc_list[i] <- auc(model_crossings_final@models[[i]])
-}
-mean(auc_list) #0.8547028
-sd(auc_list) #0.001143279
-
-
-
-#TSS: true skill statistics (Allouche, tsoar and kadmon 20061)
-tss_list <- c()
-for(i in 1:5){
-  tss_list[i] <- tss(model_crossings_final@models[[i]])
-}
-mean(tss_list) #0.5531266
-sd(tss_list) #0.006355024
-
-
-
-
-## response curves
-
-
-#response curves still on scaled scale. needs to have the unscaled predictors again
-plotResponse(model_crossings_final, "Meadows1_200m")
-plotResponse(model_crossings_final, "ArableAreas9_200m")
-plotResponse(model_crossings_final, "RoadCategory")
-
-library(plotROC)
-plotROC_JM(model_crossings_final@models[[1]])
-
-
-
-predict_crossingrisk <- predict(model_crossings_final, data = raster_BW_stack_complete,
-                                type = "cloglog", extent = extent(418000, 433000, 5379000, 5398500), progress = "text") 
-
-map_crossingrisk <- plotPred(predict_crossingrisk, lt = "Probability of \nDVC occurrence",colorramp = c("#2c7bb6", "#abd9e9", "#ffffbf", "#fdae61", "#d7191c"))
-
-
-
-#make map of collision risk minus crossing risk
-#means: aounrd 0 the roe deer cross at a certian prob and the collision risk is similar
-#in negative areas: the crossing prob is higher than collision risk
-#positive values: collision risk is higher than crossing prob
-dis_colcross <- predict_crossingrisk + predict_allSeasons
-plot(crop(dis_colcross, c(418000, 433000, 5379000, 5398500)))
-
-
-
-
-
-
-
-
